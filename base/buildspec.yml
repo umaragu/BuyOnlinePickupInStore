@@ -1,0 +1,24 @@
+# ~/environment/sam-app/buildspec.yml
+
+version: 0.2
+env:
+  git-credential-helper: yes
+phases:
+  install:
+    runtime-versions:
+      nodejs: 12
+      python: 3.8
+  pre_build:
+    commands:
+      - apt-get update -y
+      - cd resources
+  build:
+    commands:
+      - aws cloudformation package --template-file template.yml --s3-bucket $PACKAGE_BUCKET --output-template-file packaged.yml
+artifacts:
+  discard-paths: yes
+  files:
+    - resources/packaged.yml
+    - resources/parameters/$ENV/boppis-base.json
+
+

@@ -1,0 +1,5 @@
+stack_name = "boppis-order-db"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-tm9vzbf0ro1x"
+s3_prefix = "boppis-order-db"
+region = "us-east-1"
+confirm_changeset = true

@@ -1,0 +1,10 @@
+{
+    "Parameters":{
+        "Environment":"dev",
+        "LogLevel":"INFO",
+        "RetentionInDays":"7",
+        "EventBusName":"/boppis/base/eventBusName",
+        "EMPLOYEEUSERPOOL":"/boppis/dev/employee-pool/id",
+        "EMPLOYEEPOOLCLIENTID":"/boppis/dev/employee-pool/client"
+    }
+}

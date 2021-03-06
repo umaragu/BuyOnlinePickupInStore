@@ -1,0 +1,169 @@
+openapi: 3.0.1
+info:
+  title: Pickup Api
+  description: >-
+    APIs for creating and managing pickup jobs.
+  version: 1.0.0
+servers:
+  - url: 'https://bakeyourcode.com/prod'
+paths:
+  '/pickup/{store}':
+    get:
+      tags:
+        - pickup
+      summary: gets all unassigned pickup jobs and also the one assigned to the associate
+      description: Returns list of pickup jobs
+      operationId: PickUpJobs
+      parameters:
+        - name: store
+          in: path
+          description: store number
+          required: true
+          schema:
+            type: string
+        - name: associate
+          in: query
+          description: associate  ID
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: job status
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupJob'
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Associate: []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PickupReadFunction.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+  /pickup/{jobId}/{action}:
+    summary: assigns a pickup job to an associate or completes a pickup job
+    post:
+      summary: 'Workflow for pickup job'
+      description: 'assigns a pickup job to an associate or completes a pickup job'
+      operationId: updateStatus
+      parameters:
+        - name: jobId
+          in: path
+          description: jobId
+          required: true
+          schema:
+            type: string
+        - name: action
+          in: path
+          description: action
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/assignment'
+      responses:
+        '200':
+          description: Success
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Associate: []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PickupJobWorkflowFunction.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+          
+components:
+  securitySchemes:
+    OAuth2Associate:
+      type: oauth2
+      x-amazon-apigateway-authorizer:
+        type: jwt
+        jwtConfiguration:
+          issuer:
+            'Fn::Sub': >-
+              https://cognito-idp.${AWS::Region}.amazonaws.com/${EMPLOYEEUSERPOOL}
+          audience:
+            - Ref: EMPLOYEEPOOLCLIENTID
+        identitySource: $request.header.Authorization
+  schemas:
+    assignment:
+      type: object
+      properties:
+        jobId:
+          type: string
+        associate:
+          type: string
+
+    PickupJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+        jobStatus:
+          type: string
+          enum:
+            - CREATED
+            - COMPLETED
+            - ASSIGNED
+        store:
+          type: string
+        orderId:
+          type: string
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              category:
+                type: string
+              upc:
+                type: string
+              count:
+                type: string
+            

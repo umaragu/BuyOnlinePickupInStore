@@ -1,0 +1,17 @@
+{
+    "Parameters":{
+    "Environment":"dev",
+    "LogLevel":"INFO",
+    "RetentionInDays":"7",
+    "ParentVPCStack":"/boppis/dev/base-stack",
+    "DBProxyEndpoint":"/boppis/dev/order/dbproxyEndpoint",
+    "DBProxyARN":"/boppis/dev/order/dbproxyArn",
+    "DBName":"/boppis/dev/order/db",
+    "DBUser":"/boppis/dev/order/dbuser",
+    "CUSTOMERUSERPOOL":"/boppis/dev/customer-pool/id",
+    "EMPLOYEEUSERPOOL":"/boppis/dev/employee-pool/id",
+    "CUSTOMERPOOLCLIENTID":"/boppis/dev/customer-pool/client",
+    "EMPLOYEEPOOLCLIENTID":"/boppis/dev/employee-pool/client",
+    "SENDEREMAIL":"ramadu@amazon.com"
+    }
+}

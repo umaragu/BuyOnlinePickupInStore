@@ -1,0 +1,12 @@
+{
+  "name": "order-utils",
+  "version": "1.0.0",
+  "description": "utility files for boppis app",
+  "main": "mysql.js",
+  "repository": "",
+  "author": "Ramadoss",
+  "license": "MIT-0",
+  "dependencies": {
+    "mysql2": "^2.2.5"
+  }
+}

@@ -1,0 +1,204 @@
+openapi: 3.0.1
+info:
+  title: Product Api
+  description: >-
+    APIs for creating and managing product catalog.
+  version: 1.0.0
+servers:
+  - url: 'https://bakeyourcode.com/prod'
+paths:
+  '/products/{store}':
+    get:
+      tags:
+        - product
+      summary: Gets all products by store or by store and category
+      description: Returns list of product matching store, category
+      operationId: LookupProduct
+      parameters:
+        - name: store
+          in: path
+          description: store number
+          required: true
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: product category
+          required: true
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Products'
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      # security: 
+      #   - OAuth2Customer: []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProductLookupFunction.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+  /product:
+    summary: Creates a new product or updates a product
+    put:
+      summary: 'Creates a new product or updates a product'
+      description: 'Creates a new product or updates a product'
+      operationId: manageProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '200':
+          description: Success
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Employee: []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProductCreateFunction.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+  /product/{sku}:
+    get:
+      summary: 'Gets Product detail for a product'
+      description: 'Gets Product detail for a product'
+      operationId: getProductBySku
+      parameters:
+        - name: sku
+          in: path
+          description: product ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      # security: 
+      #   - OAuth2Employee: []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProductLookupFunction.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+
+components:
+  securitySchemes:
+    OAuth2Employee:
+      type: oauth2
+      x-amazon-apigateway-authorizer:
+        type: jwt
+        jwtConfiguration:
+          issuer:
+            'Fn::Sub': >-
+              https://cognito-idp.${AWS::Region}.amazonaws.com/${EMPLOYEEUSERPOOL}
+          audience:
+            - Ref: EMPLOYEEPOOLCLIENTID
+        identitySource: $request.header.Authorization
+  schemas:
+    Products:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+
+    Product:
+      type: object
+      properties:
+        sku:
+          type: string
+        ProductStatus:
+          type: string
+          enum:
+            - AVAILABLE
+            - DECOMMISSIONED
+        store:
+          type: string
+        category:
+          type: string
+        supplier:
+          type: string
+        quantity_per_unit:
+          type: number
+        upc:
+          type: string
+        unit_price:
+          type: number
+        picture:
+          type: string
+        size:
+          type: string
+        color:
+          type: string
+        product_name:
+          type: string
+        product_description:
+          type: string
+        product_detail:
+          type: string
+        in_stock:
+          type: number
+        on_hold:
+          type: number
+        on_order:
+          type: number
+        
+      

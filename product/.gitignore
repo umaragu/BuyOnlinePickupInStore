@@ -1,0 +1,6 @@
+dist/
+node_modules/
+*.toml
+*packaged.yml
+.DS_Store
+.aws-sam

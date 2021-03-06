@@ -1,0 +1,12 @@
+{
+  "name": "order-utils",
+  "version": "1.0.0",
+  "description": "utility files for boppis app",
+  "main": "mysql.js",
+  "repository": "",
+  "author": "Ramadoss",
+  "license": "MIT-0",
+  "dependencies": {
+    "aws-xray-sdk": "^3.2.0"
+  }
+}

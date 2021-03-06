@@ -1,0 +1,376 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: 'AWS::Serverless-2016-10-31'
+Description: RDS Aurora MySQL cluster.
+Parameters:
+  DatabaseName:
+    Default: "Orders"
+    Description: The database name 
+    Type: String
+  ParentVPCStack:
+    Description: 'Provide Stack name of parent VPC stack based on VPC-3AZs yaml template. Refer Cloudformation dashboard in AWS Console to get this.'
+    Type: AWS::SSM::Parameter::Value<String>
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment
+  LogLevel:
+    Type: String
+    Default: INFO
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    Description: retention period for CloudWatch Logs
+
+  DatabaseInstanceType:
+      Default: db.t2.small
+      AllowedValues:
+          - db.t2.small
+          - db.t2.medium
+          - db.r4.large
+          - db.r4.xlarge
+          - db.r4.2xlarge
+          - db.r4.4xlarge
+          - db.r4.8xlarge
+          - db.r4.16xlarge
+      Description: "The instance type to use for the database. Pricing: https://aws.amazon.com/rds/aurora/pricing/"
+      Type: String
+  
+  DatabaseUsername:
+      Default: "boppis"
+      AllowedPattern: "[a-zA-Z0-9]+"
+      ConstraintDescription: must contain only alphanumeric characters. Must have length 1-16
+      Description: The database admin account user name. (Default "prisma")
+      MaxLength: '16'
+      MinLength: '1'
+      Type: String
+
+Metadata:
+  AWS::CloudFormation::Interface:
+      ParameterGroups:
+          - Label:
+              default: Database Configuration
+            Parameters:
+              - DatabaseInstanceType
+              - DatabaseName
+              - DatabaseUsername
+      ParameterLabels:
+          DatabaseName:
+            default: Database name
+          DatabaseInstanceType:
+              default: Database Instance Type
+          DatabaseUsername:
+              default: Database Username
+
+Resources:
+  StackAlarmTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+          DisplayName: !Sub "Stack Alarm Topic - ${Environment}"
+
+  DatabaseSubnetGroup:
+      Type: AWS::RDS::DBSubnetGroup
+      Properties:
+          DBSubnetGroupDescription: CloudFormation managed DB subnet group.
+          SubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]  
+
+  ParameterGroup:
+      Type: "AWS::RDS::DBParameterGroup"
+      Properties: 
+          Description: DB parameter group 
+          Family: aurora-mysql5.7
+          Parameters:
+              max_connections: 300
+  # OrderLambdaSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription:  !Join [ " - ", [ "Security group for Secret Rotation Lambda ENIs", !Ref 'AWS::StackName' ] ] 
+  #     VpcId: {'Fn::ImportValue': !Sub '${ParentVPCStack}-VPC'}
+  #     Tags:
+  #     - Key: Name
+  #       Value: !Sub '${AWS::StackName}-OrderLambdaSecurityGroup'
+
+  # OrderLambdaSecurityGroupIngress:
+  #   Type: 'AWS::EC2::SecurityGroupIngress'
+  #   Properties:
+  #     GroupId: !GetAtt 'OrderLambdaSecurityGroup.GroupId'
+  #     IpProtocol: -1
+  #     SourceSecurityGroupId: !Ref OrderLambdaSecurityGroup
+  #     Description: 'Self Reference'
+
+  DatabaseSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties: 
+          GroupDescription: Access to database
+          SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 3306
+              ToPort: 3306
+              SourceSecurityGroupId: {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}
+              Description: 'Access to Lambda Security Group'
+          VpcId: {'Fn::ImportValue': !Sub '${ParentVPCStack}-VPC'}
+          Tags: 
+              - Key: Name
+                Value: !Sub ${DatabaseName}-security-group
+  # DBTriggerLambdaRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: 
+  #             - rds.amazonaws.com
+  #           Action:
+  #             - sts:AssumeRole
+  #     Path: "/"
+  #     ManagedPolicyArns:
+  #       - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
+  #     Policies:
+  #       - 
+  #         PolicyName: "invokeLambda"
+  #         PolicyDocument: 
+  #           Version: "2012-10-17"
+  #           Statement: 
+  #             - 
+  #               Effect: "Allow"
+  #               Action: "lambda:InvokeFunction"
+  #               Resource: !GetAtt  CreateUpdateTriggerLambda.Arn
+  # CreateUpdateTriggerLambda:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: src/
+  #     Handler: order-trigger.handler
+  #     Policies:
+  #       - VPCAccessPolicy: {}
+  #       - EventBridgePutEventsPolicy:
+  #           EventBusName: {'Fn::ImportValue': !Sub '${ParentVPCStack}-OrderEventBusName'} 
+  #     VpcConfig: 
+  #       SecurityGroupIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}]
+  #       SubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]
+  #     Runtime: nodejs12.x
+  #     Timeout: 30
+  #     Tracing: Active
+  #     Environment:
+  #       Variables:
+  #         ENVIRONMENT: !Ref Environment
+  #         ORDER_EVENT_BUS_NAME: {'Fn::ImportValue': !Sub '${ParentVPCStack}-OrderEventBusName'} 
+  #         POWERTOOLS_SERVICE_NAME: orders
+  #         POWERTOOLS_TRACE_DISABLED: "false"
+  #         LOG_LEVEL: !Ref LogLevel
+  #     Layers:
+  #       - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:2"
+  # CreateUpdateTriggerLambdaLogGroup:
+  #   Type: AWS::Logs::LogGroup
+  #   Properties:
+  #     LogGroupName: !Sub "/aws/lambda/${CreateUpdateTriggerLambda}"
+  #     RetentionInDays: !Ref RetentionInDays
+
+  RDSDBClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: !Join [ "- ", [ "Aurora PG Cluster Parameter Group for  Cloudformation Stack ", !Ref DatabaseName ] ]
+      Family: aurora-mysql5.7
+      Parameters:
+        time_zone: "US/Eastern"
+        character_set_database: "utf32"
+
+
+  DatabaseCluster:
+      Type: AWS::RDS::DBCluster
+      Properties:
+          Engine: aurora-mysql
+          MasterUsername:
+            Ref: DatabaseUsername
+          MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref AuroraMasterSecret, ':SecretString:password}}' ]]
+          BackupRetentionPeriod: 35
+          PreferredBackupWindow: 02:00-03:00
+          PreferredMaintenanceWindow: mon:03:00-mon:04:00
+          DBSubnetGroupName:
+            Ref: DatabaseSubnetGroup
+          VpcSecurityGroupIds:
+            - Ref: DatabaseSecurityGroup
+          DBClusterParameterGroupName: !Ref RDSDBClusterParameterGroup 
+          DatabaseName: !Ref DatabaseName
+  DatabaseInstance:
+      Type: AWS::RDS::DBInstance
+      Properties:
+          Engine: aurora-mysql
+          DBClusterIdentifier:
+              Ref: DatabaseCluster
+          DBInstanceClass:
+              Ref: DatabaseInstanceType
+          DBSubnetGroupName:
+              Ref: DatabaseSubnetGroup    
+          DBParameterGroupName: !Ref ParameterGroup
+          PubliclyAccessible: "false"
+          DBInstanceIdentifier: !Ref DatabaseName
+  DatabaseCPUAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+          AlarmDescription: Primary database CPU utilization is over 80%.
+          Namespace: AWS/RDS
+          MetricName: !Sub "CPUUtilization-${Environment}"
+          Unit: Percent
+          Statistic: Average
+          Period: 300
+          EvaluationPeriods: 2
+          Threshold: 80
+          ComparisonOperator: GreaterThanOrEqualToThreshold
+          Dimensions:
+              - Name: DBInstanceIdentifier
+                Value:
+                    Ref: DatabaseInstance
+          AlarmActions:
+              - Ref: StackAlarmTopic
+          InsufficientDataActions:
+              - Ref: StackAlarmTopic
+
+  DatabaseMemoryAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+          AlarmDescription: Primary database freeable memory is under 700MB.
+          Namespace: AWS/RDS/
+          MetricName: !Sub "FreeableMemory-${Environment}"
+          Unit: Bytes
+          Statistic: Average
+          Period: 300
+          EvaluationPeriods: 2
+          Threshold: 700000000
+          ComparisonOperator: LessThanOrEqualToThreshold
+          Dimensions:
+              - Name: DBInstanceIdentifier
+                Value:
+                    Ref: DatabaseInstance
+          AlarmActions:
+              - Ref: StackAlarmTopic
+          InsufficientDataActions:
+              - Ref: StackAlarmTopic
+          OKActions: 
+              - Ref: StackAlarmTopic
+
+  AuroraMasterSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Join ['/', [!Ref Environment, 'aurora-pg', !Ref 'AWS::StackName']]
+      Description: !Join ['', ['Aurora PostgreSQL Master User Secret ', 'for CloudFormation Stack ', !Ref 'AWS::StackName']]
+      Tags:
+        -
+          Key: Environment
+          Value: !Ref Environment
+        -
+          Key: DatabaseEngine
+          Value: 'Aurora MySQL'
+        -
+          Key: StackID
+          Value: !Ref 'AWS::StackId'
+      GenerateSecretString:
+        SecretStringTemplate: !Join ['', ['{"username": "', !Ref DatabaseUsername, '"}']]
+        GenerateStringKey: "password"
+        ExcludeCharacters: '"@/\'
+        PasswordLength: 16
+  SecretAuroraClusterAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref AuroraMasterSecret
+      TargetId: !Ref DatabaseCluster
+      TargetType: AWS::RDS::DBCluster
+  RDSProxyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - rds.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: GetSecret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref AuroraMasterSecret
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  "kms:ViaService": !Sub "secretsmanager.${AWS::Region}.amazonaws.com"
+        
+  DBProxy:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      DBProxyName: !Sub "${ParentVPCStack}-proxy"
+      EngineFamily: MYSQL
+      RoleArn: !GetAtt RDSProxyRole.Arn
+      RequireTLS: true
+      Auth:
+        - {AuthScheme: SECRETS, SecretArn: !Ref AuroraMasterSecret, IAMAuth: REQUIRED}
+      VpcSecurityGroupIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}]
+      VpcSubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]
+      DebugLogging: true
+  ProxyTargetGroup: 
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      DBProxyName: !Ref DBProxy
+      TargetGroupName: default
+      DBClusterIdentifiers: 
+        - !Ref DatabaseCluster
+      ConnectionPoolConfigurationInfo:
+          MaxConnectionsPercent: 70
+          MaxIdleConnectionsPercent: 50
+          ConnectionBorrowTimeout: 300
+    DependsOn: [DBProxy, DatabaseInstance]
+
+  # AuroraSecretRotationSchedule:
+  #   Type: AWS::SecretsManager::RotationSchedule
+  #   DependsOn:
+  #     - SecretAuroraClusterAttachment
+  #     - DatabaseInstance
+  #   Properties:
+  #     SecretId: !Ref AuroraMasterSecret
+  #     # RotationLambdaARN: !GetAtt CreateSecretRotationLambdaFnTrigger.SecretRotationLambdaARN
+  #     RotationRules:
+  #       AutomaticallyAfterDays: 30
+  DBProxyEndpointParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/order/dbproxyEndpoint
+      Type: String
+      Value: !GetAtt  DBProxy.Endpoint
+  DBProxyArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/order/dbproxyArn
+      Type: String
+      Value: !GetAtt  DBProxy.DBProxyArn
+  DBUserNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/order/dbuser
+      Type: String
+      Value: !Ref  DatabaseUsername
+  DatabaseNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/order/db
+      Type: String
+      Value: !Ref  DatabaseName
+
+      
+Outputs:
+    DatabaseEndpoint: 
+        Description: The database endpoint
+        Value: !GetAtt DatabaseCluster.Endpoint.Address
+    
+    DatabasePort:
+        Description: The database port
+        Value: !GetAtt DatabaseCluster.Endpoint.Port

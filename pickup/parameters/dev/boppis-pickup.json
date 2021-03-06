@@ -1,0 +1,13 @@
+{
+    "Parameters":{
+        "Environment":"dev",
+        "LogLevel":"INFO",
+        "RetentionInDays":"7",
+        "UtilityLayerName":"UtilLayer",
+        "UtilityLayerVersion":"3",
+        "OrderEventBusName":"/boppis/base/eventBusName",
+        "EMPLOYEEUSERPOOL":"/boppis/dev/employee-pool/id",
+        "EMPLOYEEPOOLCLIENTID":"/boppis/dev/employee-pool/client"
+    }
+}
+

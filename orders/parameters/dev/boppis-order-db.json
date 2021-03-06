@@ -1,0 +1,11 @@
+{
+    "Parameters":{
+        "DatabaseName":"boppis",
+        "ParentVPCStack":"/boppis/dev/base-stack",
+        "Environment":"dev",
+        "LogLevel":"INFO",
+        "RetentionInDays":"7",
+        "DatabaseInstanceType":"db.t2.small",
+        "DatabaseUsername":"boppis"
+    }
+}

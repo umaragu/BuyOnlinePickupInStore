@@ -1,0 +1,338 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: 'AWS::Serverless-2016-10-31'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment
+  LogLevel:
+    Type: String
+    Default: INFO
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    Description: retention period for CloudWatch Logs
+  OrderEventBusName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: EventBridge Event Bus Name
+  UtilityLayerName:
+    Type: String
+    Description: Utility layer Name
+  UtilityLayerVersion:
+    Type: Number
+    Description: Utility layer Version
+  EMPLOYEEUSERPOOL:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Cognito user pool URL for associates
+  EMPLOYEEPOOLCLIENTID:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Audience or Client ID of the associate user pool
+
+
+Globals:
+  Function:
+    Runtime: nodejs12.x
+    Timeout: 30
+    Tracing: Active
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        ORDER_EVENT_BUS_NAME: !Ref OrderEventBusName
+        TABLE_NAME: !Ref PickUpTable
+        LOG_LEVEL: !Ref LogLevel
+    Layers:
+      - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:2"
+      - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:UtilLayer:3"
+
+Resources:
+  # Product Catalog #
+  DeadLetterQueue:
+    Type: "AWS::SQS::Queue"
+
+  PickUpTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+        - AttributeName: store
+          AttributeType: S
+        - AttributeName: associate
+          AttributeType: S
+        - AttributeName: jobStatus
+          AttributeType: S
+
+      TableName: !Sub "Pickup-Jobs-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: jobId #Uniques number 
+          KeyType: HASH
+
+      GlobalSecondaryIndexes:
+        - IndexName: ByStoreAndStatus
+          KeySchema:
+            - AttributeName: store
+              KeyType: HASH
+            - AttributeName: jobStatus
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ByStoreAndAssociate
+          KeySchema:
+            - AttributeName: store
+              KeyType: HASH
+            - AttributeName: associate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  #############
+  # FUNCTIONS #
+  #############
+  PickupJobWorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: pickup-workflow.handler
+      Events:
+        PickupApi:
+          Type: HttpApi
+          Properties:
+            Path: /pickup/{jobId}/{action}
+            Method: POST
+            ApiId: !Ref PickupApi
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - DynamoDBReadPolicy:
+            TableName: !Ref PickUpTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref PickUpTable
+
+  PickupJobWorkflowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PickupJobWorkflowFunction}"
+      RetentionInDays: !Ref RetentionInDays
+  PickupReadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: pickup-read.handler
+      Events:
+        PickupApi:
+          Type: HttpApi
+          Properties:
+            Path: /pickup/{store}
+            Method: GET
+            ApiId: !Ref PickupApi
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - DynamoDBReadPolicy:
+            TableName: !Ref PickUpTable
+  PickupReadLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PickupReadFunction}"
+      RetentionInDays: !Ref RetentionInDays
+
+  PickupCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: pickup-create.handler
+      Events:
+        EBOrderCreation:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref OrderEventBusName
+            Pattern: 
+              source: ["org.boppis.order"]
+              detail: 
+                eventSource: ["org.boppis.order.action"]
+                eventName: [ORDER_CREATED]
+      EventInvokeConfig:
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+            Destination: !GetAtt DeadLetterQueue.Arn
+
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - DynamoDBWritePolicy:
+            TableName: !Ref PickUpTable
+        - Version: '2012-10-17' 
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt DeadLetterQueue.Arn
+  PickupCreateLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PickupCreateFunction}"
+      RetentionInDays: !Ref RetentionInDays
+
+  PickupDynamoStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: pickup-stream.handler
+      Events:
+        DynamoDB:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt PickUpTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            MaximumRetryAttempts: 2
+            BisectBatchOnFunctionError: true
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt DeadLetterQueue.Arn
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref PickUpTable
+            StreamName: "*"
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBusName
+        - Version: '2012-10-17' 
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt DeadLetterQueue.Arn
+  PickupDynamoStreamLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PickupDynamoStreamFunction}"
+      RetentionInDays: !Ref RetentionInDays
+  ###############
+  # API GATEWAY #
+  ###############
+
+
+  PickupApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      FailOnWarnings: True
+      StageName: "Prod"
+      # TracingEnabled: true
+      CorsConfiguration:
+        AllowMethods:
+          - "*"
+        AllowOrigins: 
+          - "*"
+        AllowHeaders:
+          - "*"
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 200
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: ./swagger.yml
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogs.Arn
+        Format:
+          !Join
+          - ','
+          - - '{"requestId": "$context.requestId"'
+            - '"ip": "$context.identity.sourceIp"'
+            - '"routeKey": "$context.routeKey"'
+            - '"protocol": "$context.protocol"'
+            - '"method": "$context.httpMethod"'
+            - '"path": "$context.path"'
+            - '"requestTime": "$context.requestTime"'
+            - '"integrationLatency": "$context.integrationLatency"'
+            - '"integrationStatus": "$context.integrationStatus"'
+            - '"integrationErrorMessage": "$context.integrationErrorMessage"'
+            - '"responseLatency": "$context.responseLatency"'
+            - '"responseLength": "$context.responseLength"'
+            - '"status": "$context.status"'
+            - '"userAgent": "$context.identity.userAgent"}'
+  AccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: http-api-pickup/access-logs
+      RetentionInDays: !Ref RetentionInDays
+  EventNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: PickupJobNotification
+
+  EventNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: MyTopicPolicy
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: sns:Publish
+          Resource: "*"
+      Topics:
+      - !Ref EventNotificationTopic
+
+  EventNotificationRule:
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: Notification To associates when the pickup job is created
+      EventBusName: !Ref OrderEventBusName 
+      EventPattern: 
+        source:
+          - "org.boppis.pickup"
+        detail-type:
+          - "BOPPIS - pickup"
+        detail:
+          eventSource:
+            - "org.boppis.pickup.action"
+          eventName:
+            - "PICKUP_JOB_CREATED"
+      Name: PickupJobNotifications
+      State: "ENABLED"
+      Targets: 
+        - Arn: !Ref EventNotificationTopic
+          Id: Notification
+          RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 400
+  PickupApiParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/api/pickup
+      Type: String
+      Value: !Sub "https://${PickupApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+Outputs:
+  PickupApiEndpoint: 
+    Description: "API Gateway endpoint URL for Prod stage for Pickup api"
+    Value: !Sub "https://${PickupApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+#   # ApiArnParameter:
+#   #   Type: AWS::SSM::Parameter
+#   #   Properties:
+#   #     Name: !Sub /ecommerce/${Environment}/products/api/arn
+#   #     Type: String
+#   #     Value: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/prod"
+
+#   # ApiUrlParameter:
+#   #   Type: AWS::SSM::Parameter
+#   #   Properties:
+#   #     Name: !Sub /ecommerce/${Environment}/products/api/url
+#   #     Type: String
+#   #     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+#   # #####################
+#   # # DEAD LETTER QUEUE #
+#   # #####################
+#   # DeadLetterQueue:
+#   #   Type: AWS::CloudFormation::Stack
+#   #   Properties:
+#   #     # The path starts with '../..' as this will be evaluated from the
+#   #     # products/build folder, not the products folder.
+#   #     TemplateURL: ../../shared/templates/dlq.yaml

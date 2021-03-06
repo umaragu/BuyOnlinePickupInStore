@@ -1,0 +1,232 @@
+openapi: 3.0.1
+info:
+  title: Order Api
+  description: >-
+    APIs for creating and managing orders from customers.
+  version: 1.0.0
+servers:
+  - url: 'https://bakeyourcode.com/prod'
+paths:
+  '/order':
+    get:
+      tags:
+        - order
+      summary: gets order by order id or list of orders for a customer by customer id
+      description: gets order by order id or list of orders for a customer by customer id
+      operationId: GetOrder
+      parameters:
+        - name: orderId
+          in: query
+          description: Order ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Customer: []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LookupOrderLambda.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+    post:
+      summary: 'Creates a pickup order'
+      description: 'Creates a new pickup order'
+      operationId: CreateOrder
+      tags:
+        - order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+      responses:
+        '200':
+          description: Success
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Customer: []
+
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateOrderLambda.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+  '/order/internal':
+    get:
+      tags:
+        - internal
+      summary: gets order by order id or list of orders for a customer by customer id
+      description: gets order by order id or list of orders for a customer by customer id
+      operationId: GetOrderForInternal
+      parameters:
+        - name: orderId
+          in: query
+          description: Order ID
+          schema:
+            type: string
+        - name: customer_id
+          in: query
+          description: customer  ID
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Bad Request
+          content: {}
+        '401':
+          description: Unauthorized
+          content: {}
+        '404':
+          description: Not Found
+          content: {}
+        '500':
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Associate:  []
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          'Fn::Sub': >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LookupOrderLambda.Arn}/invocations
+        payloadFormatVersion: '2.0'
+        responses:
+          default:
+            statusCode: 200
+  "/order/internal/complete":
+    post:
+      tags:
+      - internal
+      summary: puts order close events in eventbridge
+      responses:
+        200:
+          description: Success
+          content: {}
+        400:
+          description: Bad Request
+          content: {}
+        401:
+          description: Unauthorized
+          content: {}
+        500:
+          description: Internal Server Error
+          content: {}
+      security: 
+        - OAuth2Associate:  []
+      x-amazon-apigateway-integration:
+        integrationSubtype: "EventBridge-PutEvents"
+        credentials:
+          Fn::GetAtt: [ApiGatewayEBFirstClassIntegrationRole, Arn]
+        # httpMethod: POST
+        requestParameters:
+          Detail: "$request.body"
+          DetailType: "BOPPIS - Order Updates"
+          Source: "org.boppis.order"
+          EventBusName: 
+            Ref: OrderEventBus
+          Resources: "$request.body.eventData[0].orderId"
+        responses:
+          default:
+            statusCode: 200
+        connectionType: "INTERNET"
+        type: aws_proxy
+        payloadFormatVersion: "1.0"
+      x-codegen-request-body-name: body
+
+
+components:
+  securitySchemes:
+    OAuth2Customer:
+      type: oauth2
+      x-amazon-apigateway-authorizer:
+        type: jwt
+        jwtConfiguration:
+          issuer:
+            'Fn::Sub': >-
+              https://cognito-idp.${AWS::Region}.amazonaws.com/${CUSTOMERUSERPOOL}
+          audience:
+            - Ref: CUSTOMERPOOLCLIENTID
+        identitySource: $request.header.Authorization
+    OAuth2Associate:
+      type: oauth2
+      x-amazon-apigateway-authorizer:
+        type: jwt
+        jwtConfiguration:
+          issuer:
+            'Fn::Sub': >-
+              https://cognito-idp.${AWS::Region}.amazonaws.com/${EMPLOYEEUSERPOOL}
+          audience:
+            - Ref: EMPLOYEEPOOLCLIENTID
+        identitySource: $request.header.Authorization
+  schemas:
+    Order:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              category:
+                type: string
+              upc:
+                type: string
+              count:
+                type: string
+        status:
+          type: string
+          enum:
+            - CREATED
+            - IN_PROGRESS
+            - COMPLETED
+            

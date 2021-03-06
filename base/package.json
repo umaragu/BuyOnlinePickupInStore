@@ -1,0 +1,14 @@
+{
+  "name": "process-largefiles",
+  "version": "1.0.0",
+  "description": "Process large video file to creating screenshots",
+  "main": "app.js",
+  "repository": "",
+  "author": "Ramadoss",
+  "license": "MIT-0",
+  "dependencies": {
+    "aws-sdk": "^2.824.0",
+    "axios": "^0.21.1",
+    "csvtojson": "^2.0.10"
+  }
+}

@@ -1,0 +1,471 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: 'AWS::Serverless-2016-10-31'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment
+  LogLevel:
+    Type: String
+    Default: INFO
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    Description: retention period for CloudWatch Logs
+  ParentVPCStack:
+    Description: 'Provide Stack name of parent VPC stack based on VPC-3AZs yaml template. Refer Cloudformation dashboard in AWS Console to get this.'
+    Type: AWS::SSM::Parameter::Value<String>
+  DBProxyEndpoint:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: EventBridge Event Bus Name
+  DBUser:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Database User name
+  DBProxyARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Database Proxy Arn
+  DBName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Database  name
+  CUSTOMERUSERPOOL:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Cognito user pool URL for Customers
+  EMPLOYEEUSERPOOL:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Cognito user pool URL for associates
+  CUSTOMERPOOLCLIENTID:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Audience or Client ID of the customer user pool
+  EMPLOYEEPOOLCLIENTID:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Audience or Client ID of the associate user pool  
+  SENDEREMAIL:
+    Type: String
+    Description: EMAIL address verified in SES as sender 
+Globals:
+  Function:
+    Runtime: nodejs12.x
+    Timeout: 30
+    Tracing: Active
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        ORDER_EVENT_BUS_NAME: !Ref OrderEventBus
+        DB_PROXY: !Ref DBProxyEndpoint
+        LOG_LEVEL: !Ref LogLevel
+        DB_USER: !Ref DBUser
+        DB_REGION: !Ref AWS::Region
+        DB_NAME: !Ref DBName
+
+    Layers:
+      - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:2"
+      - !Ref UtilLayer
+      - !Ref DBLayer
+
+
+Resources:
+  # Product Catalog #
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+
+  OrderEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub "OrderEvents-${Environment}"
+  EventBusName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/eventBusName
+      Type: String
+      Value: !Ref OrderEventBus
+  Events:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/events
+      Type: StringList
+      Value: "PICKUP_JOB_CREATED,PICKUP_JOB_ASSIGNED,PICKUP_JOB_COMPLETED,ORDER_CREATED,ORDER_COMPLETED,ORDER_READY_FOR_PICKUP"
+  LayerUtility:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/layerArn
+      Type: StringList
+      Value: !Ref UtilLayer
+  UtilLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: layers/util/
+      CompatibleRuntimes:
+        - nodejs12.x
+        - nodejs8.10
+    Metadata:
+      BuildMethod: nodejs12.x              # Required to have AWS SAM build this layer
+  DBLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: layers/mysql
+      CompatibleRuntimes:
+        - nodejs12.x
+        - nodejs8.10
+    Metadata:
+      BuildMethod: nodejs12.x              # Required to have AWS SAM build this layer
+
+  #############
+  # FUNCTIONS #
+  #############
+  CreateOrderLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: order-create.handler
+      Events:
+        OrderApi:
+          Type: HttpApi
+          Properties:
+            Path: /order
+            Method: POST
+            ApiId: !Ref OrderApi
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - VPCAccessPolicy: {}
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBus
+        - Version: '2012-10-17' 
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource: 
+              - !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/*"
+      VpcConfig: 
+        SecurityGroupIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}]
+        SubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]
+
+
+  CreateOrderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CreateOrderLambda}"
+      RetentionInDays: !Ref RetentionInDays
+  CreateTableCustomResource:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: order-create.createtable
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - VPCAccessPolicy: {}
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBus
+        - Version: '2012-10-17' 
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource: 
+              - !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/*"
+      VpcConfig: 
+        SecurityGroupIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}]
+        SubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]
+
+
+  CreateTableCustomResourceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CreateTableCustomResource}"
+      RetentionInDays: !Ref RetentionInDays
+  LookupOrderLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: order-lookup.handler
+      Events:
+        OrderApi:
+          Type: HttpApi
+          Properties:
+            Path: /order
+            Method: GET
+            ApiId: !Ref OrderApi
+        OrderInternalApi:
+          Type: HttpApi
+          Properties:
+            Path: /order/internal
+            Method: GET
+            ApiId: !Ref OrderApi
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - VPCAccessPolicy: {}
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBus
+        - Version: '2012-10-17' 
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource: 
+              - !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/*"
+      VpcConfig: 
+        SecurityGroupIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}]
+        SubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]
+
+  LookupOrderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LookupOrderLambda}"
+      RetentionInDays: !Ref RetentionInDays
+
+  UpdateOrderLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: order-update.handler
+      Events:
+        EBOrderCreation:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref OrderEventBus
+            Pattern: 
+              source: ["org.boppis.pickup","org.boppis.order"]
+              detail: 
+                eventSource: ["org.boppis.pickup.action","org.boppis.order.action"]
+                eventName: [PICKUP_JOB_ASSIGNED, PICKUP_JOB_COMPLETED,ORDER_COMPLETED]
+      EventInvokeConfig:
+        DestinationConfig:
+          OnFailure:
+            Type: SQS 
+            Destination: !GetAtt DeadLetterQueue.Arn
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - VPCAccessPolicy: {}
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBus
+        - Version: '2012-10-17' 
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource: 
+              - !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/*"
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: 
+              - !GetAtt DeadLetterQueue.Arn
+      VpcConfig: 
+        SecurityGroupIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-LambdaDBSecurityGroup'}]
+        SubnetIds: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetsPrivate'}]
+  UpdateOrderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${UpdateOrderLambda}"
+      RetentionInDays: !Ref RetentionInDays
+  SendEmailLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: send-email.handler
+      Environment:
+        Variables:
+          SENDER: !Ref SENDEREMAIL
+          EMAIL_TEMPLATE: OrderUpdateTemplate
+      Events:
+        EBOrderCreation:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref OrderEventBus
+            Pattern: 
+              source: ["org.boppis.pickup","org.boppis.order"]
+              detail: 
+                eventSource: ["org.boppis.pickup.action","org.boppis.order.action"]
+                eventName: [PICKUP_JOB_ASSIGNED, PICKUP_JOB_COMPLETED,ORDER_CREATED,ORDER_COMPLETED]
+      EventInvokeConfig:
+        DestinationConfig:
+          OnFailure:
+            Type: SQS 
+            Destination: !GetAtt DeadLetterQueue.Arn
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - VPCAccessPolicy: {}
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBus
+        - Version: '2012-10-17' 
+          Statement:
+          - Effect: Allow
+            Action:
+              - ses:sendTemplatedEmail
+            Resource: 
+              - "*"
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: 
+              - !GetAtt DeadLetterQueue.Arn
+  SendEmailLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${SendEmailLambda}"
+      RetentionInDays: !Ref RetentionInDays
+
+  ApiGatewayEBFirstClassIntegrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+        AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - apigateway.amazonaws.com
+              Action:
+                - 'sts:AssumeRole'
+        Path: /svc/
+        Policies:
+          - PolicyName: eb
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                  - Effect: Allow
+                    Action: 
+                      - events:PutEvents
+                    Resource: !GetAtt  OrderEventBus.Arn 
+          - PolicyName: cw
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                  - Effect: Allow
+                    Action: 
+                      - "logs:CreateLogGroup"
+                      - "logs:CreateLogStream"
+                      - "logs:DescribeLogGroups"
+                      - "logs:DescribeLogStreams"
+                      - "logs:PutLogEvents"
+                      - "logs:GetLogEvents"
+                      - "logs:FilterLogEvents"
+                    Resource: "*"  
+
+
+                  
+  OrderApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      FailOnWarnings: True
+      StageName: "Prod"
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 50
+      CorsConfiguration:
+        AllowMethods:
+          - "*"
+        AllowOrigins: 
+          - "*"
+        AllowHeaders:
+          - "*"
+      # TracingEnabled: true
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: ./swagger.yml
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogs.Arn
+        Format:
+          !Join
+          - ','
+          - - '{"requestId": "$context.requestId"'
+            - '"ip": "$context.identity.sourceIp"'
+            - '"routeKey": "$context.routeKey"'
+            - '"protocol": "$context.protocol"'
+            - '"method": "$context.httpMethod"'
+            - '"path": "$context.path"'
+            - '"requestTime": "$context.requestTime"'
+            - '"integrationLatency": "$context.integrationLatency"'
+            - '"integrationStatus": "$context.integrationStatus"'
+            - '"integrationErrorMessage": "$context.integrationErrorMessage"'
+            - '"responseLatency": "$context.responseLatency"'
+            - '"responseLength": "$context.responseLength"'
+            - '"status": "$context.status"'
+            - '"userAgent": "$context.identity.userAgent"}'
+  AccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: http-api-orders/access-logs
+      RetentionInDays: !Ref RetentionInDays
+  
+  EventNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: OrderNotification
+
+  EventNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: MyTopicPolicy
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: sns:Publish
+          Resource: "*"
+      Topics:
+      - !Ref EventNotificationTopic
+
+  # EventNotificationSES:
+  #   Type: AWS::SES::Template
+  #   Properties:
+  #     Template:
+  #       TemplateName:  OrderUpdateTemplate
+  #       SubjectPart: "ElectBest: Order - {{order_id}} updates" 
+  #       HtmlPart: <h1>Hi {{customer_name}} </h1>{{#if created}}<p>Thank you for shopping at ElectBest. Your order number is {{order_id}}. When the order is ready for pickup, You will receive an email.</p>{{/if}}{{#if completed}}<p>Thank you for shopping at ElectBest. Your order number, {{order_id}} is <b>complete</b> now.</p>{{/if}}{{#if pickup}}<p>Your order is ready for <b>pickup</b>.<p>The pickup address is <b>{{store_address}}</b></p></p>{{/if}}<br/><h4> Pleasure doing business with you,<br/> ElectBest</h4>
+  EventNotificationSES:
+    Type: AWS::SES::Template
+    Properties:
+      Template:
+        TemplateName: OrderUpdateTemplate
+        SubjectPart: "ElectBest: Order - {{order_id}} updates" 
+        HtmlPart: "<h1>Hi {{customer_name}} </h1>{{#if created}}<p>Thank you for shopping at ElectBest. Your order number is {{order_id}}. When the order is ready for pickup, You will receive an email.</p>{{/if}}{{#if completed}}<p>Thank you for shopping at ElectBest. Your order number, {{order_id}} is <b>complete</b> now.</p>{{/if}}{{#if pickup}}<p>Your order is ready for <b>pickup</b>.<p>The pickup address is <b>{{store_address}}</b></p></p>{{/if}}<br/><h4> Pleasure doing business with you,<br/> ElectBest</h4>"
+
+
+  EventNotificationRule:
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: Notification To Customers
+      EventBusName: !Ref OrderEventBus
+      EventPattern: 
+        source:
+          - "org.boppis.order"
+        detail-type:
+          - "BOPPIS - Order Updates"
+        detail:
+          eventSource:
+            - "org.boppis.order.action"
+            - "org.boppis.pickup.action"
+          eventName:
+            - "ORDER_CREATED"
+            - "ORDER_COMPLETED"
+            - "ORDER_READY_FOR_PICKUP"
+      Name: OrderNotifications
+      State: "ENABLED"
+      Targets: 
+        - Arn: !Ref EventNotificationTopic
+          Id: Notification
+          RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 400
+  # OrderTableCreationTrigger:
+  #   Type: Custom::OrderTableCreationTrigger
+  #   Properties:
+  #       ServiceToken: !GetAtt CreateTableCustomResource.Arn
+  OrderApiParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /boppis/${Environment}/api/order
+      Type: String
+      Value: !Sub "https://${OrderApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+
+Outputs:
+  OrderApiEndpoint: 
+    Description: "API Gateway endpoint URL for Prod stage for Orderapi"
+    Value: !Sub "https://${OrderApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  
