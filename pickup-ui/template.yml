@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  Repository:
+    Type: String
+    Description: GitHub Repository URL
+
+  OauthToken:
+    Type: String
+    Description: GitHub Repository URL
+    NoEcho: true
+
+  Domain:
+    Type: String
+    Description: Domain name to host application
+
+Resources:
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - amplify.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Amplify
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "amplify:*"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "cloudformation:create*"
+                  - "cloudformation:update*"
+                  - "cloudformation:delete*"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "iam:create*"
+                  - "iam:update*"
+                  - "iam:delete*"
+                  - "iam:getRole"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "s3:createBucket"
+                Resource: "*"
+
+  AmplifyApp:
+    Type: "AWS::Amplify::App"
+    Properties:
+      Name:  pick up app
+      Repository: !Ref Repository
+      Description: Best Elect store pick up application
+      OauthToken: !Ref OauthToken
+      BuildSpec: |-
+            version: 1
+            env:
+              variables:
+                REACT_APP_ORDER_API: https://qdk7p3pfu7.execute-api.us-east-1.amazonaws.com/Prod
+                REACT_APP_PICKUP_API: https://otrkzgy44e.execute-api.us-east-1.amazonaws.com/Prod
+                REACT_APP_API_RETRY: 2
+                REACT_APP_USER_POOL_ID: us-east-1_LP0h3Qlnz
+                REACT_APP_WEBCLIENT_POOL_ID: 3q0bi4c7tqcma2ko9ulhc1snn1
+            backend:
+              phases:
+                build:
+                  commands:
+                    - amplifyPush --simple
+            frontend:
+              phases:
+                preBuild:
+                  commands:
+                    - npm ci
+                build:
+                  commands:
+                    - npm run build
+                    - ls -lrt
+                    - cd amplify
+                    - cat ./backend/amplify-meta.json
+              artifacts:
+                baseDirectory: build
+                files:
+                  - '**/*'
+              cache:
+                paths:
+                  - node_modules/**/*
+            appRoot: pickup-ui
+      # CustomRules:
+      #   - Source: /dist/vue.min.js
+      #     Target: /vue.min.js
+      #     Status: '200'
+      Tags:
+        - Key: Name
+          Value: pickup
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      BranchName: dev
+      AppId: !GetAtt AmplifyApp.AppId
+      Description: dev Branch
+      EnableAutoBuild: true
+      Tags:
+        - Key: Name
+          Value: pickup-dev
+        - Key: Branch
+          Value: dev
+
+  # AmplifyDomain:
+  #   Type: AWS::Amplify::Domain
+  #   Properties:
+  #     DomainName: !Ref Domain
+  #     AppId: !GetAtt AmplifyApp.AppId
+  #     SubDomainSettings:
+  #       - Prefix: master
+  #         BranchName: !GetAtt AmplifyBranch.BranchName
+
+Outputs:
+  DefaultDomain:
+    Value: !GetAtt AmplifyApp.DefaultDomain
+
+  # MasterBranchUrl:
+  #   Value: !Join [ ".", [ !GetAtt AmplifyBranch.BranchName, !GetAtt AmplifyDomain.DomainName ]]
