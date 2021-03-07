@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  Repository:
+    Type: String
+    Description: GitHub Repository URL
+  OauthToken:
+    Type: String
+    Description: oAuth Token
+    NoEcho: true
+  ORDERAPI:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/api/order
+    Description: Order API
+  PRODUCTAPI:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/api/product
+    Description: Product API 
+  APIRETRY:
+    Type: Number
+    Default: 2
+    Description: Retry count
+  CUSTUSERPOOL:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/customer-pool/id
+    Description: User pool id of customers
+
+  CUSTUSERPOOLCLIENT:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/customer-pool/client
+    Description: Userpool client id of customers
+
+Resources:
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - amplify.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Amplify
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "amplify:*"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "cloudformation:create*"
+                  - "cloudformation:update*"
+                  - "cloudformation:delete*"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "iam:create*"
+                  - "iam:update*"
+                  - "iam:delete*"
+                  - "iam:getRole"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "s3:createBucket"
+                Resource: "*"
+
+  AmplifyApp:
+    Type: "AWS::Amplify::App"
+    Properties:
+      Name:  retail app
+      Repository: !Ref Repository
+      Description: Best Elect store retail application
+      OauthToken: !Ref OauthToken
+      BuildSpec: !Sub |-
+            version: 1
+            env:
+              variables:
+                REACT_APP_ORDER_API: ${ORDERAPI}
+                REACT_APP_PRODUCT_API: ${PRODUCTAPI}
+                REACT_APP_API_RETRY: ${APIRETRY}
+                REACT_APP_USER_POOL_ID: ${CUSTUSERPOOL}
+                REACT_APP_WEBCLIENT_POOL_ID: ${CUSTUSERPOOLCLIENT}
+            frontend:
+              phases:
+                preBuild:
+                  commands:
+                    - npm ci
+                build:
+                  commands:
+                    - npm run build
+                    - ls -lrt
+              artifacts:
+                baseDirectory: build
+                files:
+                  - '**/*'
+              cache:
+                paths:
+                  - node_modules/**/*
+            appRoot: retail-ui
+      # CustomRules:
+      #   - Source: /dist/vue.min.js
+      #     Target: /vue.min.jshttps://qdk7p3pfu7.execute-api.us-east-1.amazonaws.com/Prod
+      #     Status: '200'
+      Tags:
+        - Key: Name
+          Value: retail
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      BranchName: dev
+      AppId: !GetAtt AmplifyApp.AppId
+      Description: dev Branch
+      EnableAutoBuild: true
+      Tags:
+        - Key: Name
+          Value: retail-dev
+        - Key: Branch
+          Value: dev
+
+  # AmplifyDomain:
+  #   Type: AWS::Amplify::Domain
+  #   Properties:
+  #     DomainName: !Ref Domain
+  #     AppId: !GetAtt AmplifyApp.AppId
+  #     SubDomainSettings:
+  #       - Prefix: master
+  #         BranchName: !GetAtt AmplifyBranch.BranchName
+
+Outputs:
+  DefaultDomain:
+    Value: !GetAtt AmplifyApp.DefaultDomain
+
+  # MasterBranchUrl:
+  #   Value: !Join [ ".", [ !GetAtt AmplifyBranch.BranchName, !GetAtt AmplifyDomain.DomainName ]]
