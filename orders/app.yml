@@ -515,10 +515,10 @@ Resources:
           RetryPolicy:
               MaximumRetryAttempts: 2
               MaximumEventAgeInSeconds: 400
-  # OrderTableCreationTrigger:
-  #   Type: Custom::OrderTableCreationTrigger
-  #   Properties:
-  #       ServiceToken: !GetAtt CreateTableCustomResource.Arn
+  OrderTableCreationTrigger:
+    Type: Custom::OrderTableCreationTrigger
+    Properties:
+        ServiceToken: !GetAtt CreateTableCustomResource.Arn
   OrderApiParam:
     Type: AWS::SSM::Parameter
     Properties:
