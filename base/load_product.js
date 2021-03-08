@@ -17,14 +17,6 @@ let stores = [
 ]
 
 
-// const result = excelToJson({
-//     header: {
-//         rows: 1
-//     },
-
-//     source: fs.readFileSync('productcatalog.xlsx') // fs.readFileSync return a Buffer
-// });
-
 csv()
     .fromFile("productcatalog.csv")
     .then((products) => {
@@ -41,8 +33,10 @@ csv()
             Names: [`/boppis/${env}/resources/s3`,`/boppis/${env}/resources/distribution`,`/boppis/${env}/api/product`], /* required */
             WithDecryption: false
         };
-        ssm.getParameters(params).promise().then(parameterData => {
+        console.log("outside")
 
+        ssm.getParameters(params).promise().then(parameterData => {
+            console.log(parameterData)
             let params = {};
             for(let p of parameterData.Parameters) {
                 console.log(p)
@@ -62,7 +56,7 @@ csv()
                 if(!base64.startsWith('http')){
                     let buf = Buffer.from(base64.split(',')[1], 'base64');
                     imagePath ='images/' + category + "/" + product.Name + ".jpg";
-                    fullPath = CF_URL + imagePath;
+                    fullPath = "https://"+CF_URL + "/"+imagePath;
                     let s3Params = {
                         Bucket: s3Bucket,
                         Key: imagePath,

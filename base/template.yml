@@ -464,7 +464,19 @@ Resources:
       IpProtocol: -1
       SourceSecurityGroupId: !Ref LambdaDBSecurityGroup
       Description: 'Self Reference'
-        
+        s3Bucket:
+          Type: AWS::S3::Bucket
+          Properties: 
+            AccessControl: Private | PublicRead | PublicReadWrite | AuthenticatedRead | LogDeliveryWrite | BucketOwnerRead | BucketOwnerFullControl
+            BucketName: 
+            CorsConfiguration: 
+            LifecycleConfiguration: 
+            NotificationConfiguration: 
+            VersioningConfiguration: 
+            WebsiteConfiguration: 
+            Tags:
+              - Key: key
+                Value: value
   SecretsManagerVPCEndpoint:
     Type: 'AWS::EC2::VPCEndpoint'
     Properties:
@@ -520,6 +532,16 @@ Resources:
           Required: true
           Mutable: true
         -
+          Name: family_name
+          # Required: true
+          Mutable: true
+          AttributeDataType: String
+        -
+          Name: given_name
+          # Required: true
+          Mutable: true
+          AttributeDataType: String
+        -
           Name: phone_number
           Required: true
           Mutable: true
@@ -556,8 +578,8 @@ Resources:
     Properties:
       ClientName: Customerpool_app_clientWeb
       RefreshTokenValidity: !Ref UserpoolClientRefreshTokenValidity
-      ReadAttributes: [email,phone_number]
-      WriteAttributes: [email,phone_number]
+      ReadAttributes: [email,phone_number,given_name,family_name]
+      WriteAttributes: [email,phone_number,given_name,family_name]
       UserPoolId: !Ref CustomerUserPool
     DependsOn: CustomerUserPool
 
@@ -650,19 +672,19 @@ Resources:
     Properties:
       CloudFrontOriginAccessIdentityConfig:
         Comment: 'origin identity'
-  # BucketPolicy:
-  #   Type: AWS::S3::BucketPolicy
-  #   DependsOn: [CloudFrontOriginIdentity, S3ResourceBucket]
-  #   Properties:
-  #     Bucket: private-bucket
-  #     PolicyDocument:
-  #       Version: '2012-10-17'
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal:
-  #             AWS: !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginIdentity}'
-  #           Action: 's3:GetObject'
-  #           Resource: !Sub "arn:aws:s3:::${S3ResourceBucket}/*"
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DependsOn: [CloudFrontOriginIdentity, S3ResourceBucket]
+    Properties:
+      Bucket: !Ref S3ResourceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginIdentity}'
+            Action: 's3:GetObject'
+            Resource: !Sub "arn:aws:s3:::${S3ResourceBucket}/*"
   ImageDistribution:
     Type: AWS::CloudFront::Distribution
     DependsOn: [CloudFrontOriginIdentity, S3ResourceBucket]
@@ -836,7 +858,34 @@ Outputs:
     Value: !Ref S3VPCEndpoint
     Export:
       Name: !Sub '${AWS::StackName}-S3VPCEndpoint'
+
+  EBVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: '*'
+            Effect: Allow
+            Resource: '*'
+            Principal: '*'
+      RouteTableIds:
+        - !Ref RouteTableAPrivate
+        - !Ref RouteTableBPrivate
+        - !Ref RouteTableCPrivate
+      ServiceName: !Join 
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .events
+      VpcId: !Ref VPC
       
+  EBVPCEndpoint:
+    Description: EventBridge VPC Endpoint
+    Value: !Ref EBVPCEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-EBVPCEndpoint'
+
   SecretsManagerVPCEndpoint:
     Description: Secrets Manager VPC Endpoint
     Value: !Ref SecretsManagerVPCEndpoint

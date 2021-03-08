@@ -86,8 +86,8 @@ paths:
         '500':
           description: Internal Server Error
           content: {}
-      security: 
-        - OAuth2Employee: []
+      # security: 
+      #   - OAuth2Employee: []
       x-amazon-apigateway-integration:
         type: aws_proxy
         httpMethod: POST

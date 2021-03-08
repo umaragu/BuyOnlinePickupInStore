@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "boppis-base"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-qsdzmjzgr93z"
+s3_prefix = "boppis-base"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "ClassB=\"0\" Environment=\"dev\" UserpoolClientRefreshTokenValidity=\"5\""

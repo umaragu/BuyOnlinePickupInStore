@@ -9,6 +9,7 @@ Parameters:
   ParentVPCStack:
     Description: 'Provide Stack name of parent VPC stack based on VPC-3AZs yaml template. Refer Cloudformation dashboard in AWS Console to get this.'
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/base-stack
   Environment:
     Type: String
     Default: dev

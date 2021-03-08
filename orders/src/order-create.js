@@ -144,10 +144,12 @@ exports.createtable = async (event, context) => {
             await connection.execute(table);
         }
         await mysql.closeConnection(connection)
+        await sendResponse(event, context, "SUCCESS");
+
     } catch (error) {
         await sendResponse(event, context, "FAILED");
+        return;
     }
-    await sendResponse(event, context, "SUCCESS");
 
 }
 

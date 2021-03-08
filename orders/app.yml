@@ -16,29 +16,38 @@ Parameters:
   ParentVPCStack:
     Description: 'Provide Stack name of parent VPC stack based on VPC-3AZs yaml template. Refer Cloudformation dashboard in AWS Console to get this.'
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/base-stack
   DBProxyEndpoint:
     Type: AWS::SSM::Parameter::Value<String>
-    Description: EventBridge Event Bus Name
+    Default: /boppis/dev/order/dbproxyEndpoint
+    Description: DBProxyEndpoint
   DBUser:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/order/dbuser
     Description: Database User name
   DBProxyARN:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/order/dbproxyArn
     Description: Database Proxy Arn
   DBName:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/order/db
     Description: Database  name
   CUSTOMERUSERPOOL:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/customer-pool/id
     Description: Cognito user pool URL for Customers
   EMPLOYEEUSERPOOL:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/employee-pool/id
     Description: Cognito user pool URL for associates
   CUSTOMERPOOLCLIENTID:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/customer-pool/client
     Description: Audience or Client ID of the customer user pool
   EMPLOYEEPOOLCLIENTID:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/employee-pool/client
     Description: Audience or Client ID of the associate user pool  
   SENDEREMAIL:
     Type: String
@@ -47,6 +56,7 @@ Globals:
   Function:
     Runtime: nodejs12.x
     Timeout: 30
+    MemorySize: 256
     Tracing: Active
     Environment:
       Variables:

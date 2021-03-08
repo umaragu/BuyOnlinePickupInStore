@@ -4,15 +4,31 @@ Parameters:
   Repository:
     Type: String
     Description: GitHub Repository URL
-
   OauthToken:
     Type: String
-    Description: GitHub Repository URL
+    Description: oAuth Token
     NoEcho: true
+  ORDERAPI:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/api/order
+    Description: GitHub Repository URL
+  PICKUPAPI:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/api/pickup
+    Description: GitHub Repository URL
+  APIRETRY:
+    Type: Number
+    Default: 2
+    Description: GitHub Repository URL
+  EMPUSERPOOL:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/employee-pool/id
+    Description: User pool id of employeeseiifcckjejrtkebhetcvjvrikllcluenvccrjtvcrvul
 
-  Domain:
-    Type: String
-    Description: Domain name to host application
+  EMPUSERPOOLCLIENT:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/employee-pool/client
+    Description: Userpool client id of employees
 
 Resources:
   AmplifyRole:
@@ -60,20 +76,15 @@ Resources:
       Repository: !Ref Repository
       Description: Best Elect store pick up application
       OauthToken: !Ref OauthToken
-      BuildSpec: |-
+      BuildSpec: !Sub |-
             version: 1
             env:
               variables:
-                REACT_APP_ORDER_API: https://qdk7p3pfu7.execute-api.us-east-1.amazonaws.com/Prod
-                REACT_APP_PICKUP_API: https://otrkzgy44e.execute-api.us-east-1.amazonaws.com/Prod
-                REACT_APP_API_RETRY: 2
-                REACT_APP_USER_POOL_ID: us-east-1_LP0h3Qlnz
-                REACT_APP_WEBCLIENT_POOL_ID: 3q0bi4c7tqcma2ko9ulhc1snn1
-            backend:
-              phases:
-                build:
-                  commands:
-                    - amplifyPush --simple
+                REACT_APP_ORDER_API: ${ORDERAPI}
+                REACT_APP_PICKUP_API: ${PICKUPAPI}
+                REACT_APP_API_RETRY: ${APIRETRY}
+                REACT_APP_USER_POOL_ID: ${EMPUSERPOOL}
+                REACT_APP_WEBCLIENT_POOL_ID: ${EMPUSERPOOLCLIENT}
             frontend:
               phases:
                 preBuild:
@@ -83,8 +94,6 @@ Resources:
                   commands:
                     - npm run build
                     - ls -lrt
-                    - cd amplify
-                    - cat ./backend/amplify-meta.json
               artifacts:
                 baseDirectory: build
                 files:
@@ -95,7 +104,7 @@ Resources:
             appRoot: pickup-ui
       # CustomRules:
       #   - Source: /dist/vue.min.js
-      #     Target: /vue.min.js
+      #     Target: /vue.min.jshttps://qdk7p3pfu7.execute-api.us-east-1.amazonaws.com/Prod
       #     Status: '200'
       Tags:
         - Key: Name

@@ -35,7 +35,7 @@ class Cart extends Component {
     e.preventDefault();
     const user = this.context.user;
     const order = {
-      customer_id: user.username,
+      customer_id: user.attributes.email,
       customer_name: user.attributes.given_name +" " + user.attributes.family_name,
       order_type: "STORE_PICKUP",
       store_address: this.props.store.address,

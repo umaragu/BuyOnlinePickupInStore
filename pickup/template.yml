@@ -15,18 +15,15 @@ Parameters:
     Description: retention period for CloudWatch Logs
   OrderEventBusName:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/eventBusName
     Description: EventBridge Event Bus Name
-  UtilityLayerName:
-    Type: String
-    Description: Utility layer Name
-  UtilityLayerVersion:
-    Type: Number
-    Description: Utility layer Version
   EMPLOYEEUSERPOOL:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/employee-pool/client/id
     Description: Cognito user pool URL for associates
   EMPLOYEEPOOLCLIENTID:
     Type: AWS::SSM::Parameter::Value<String>
+    Default: /boppis/dev/employee-pool/client
     Description: Audience or Client ID of the associate user pool
 
 

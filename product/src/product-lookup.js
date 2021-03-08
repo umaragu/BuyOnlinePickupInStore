@@ -41,7 +41,7 @@ async function lookupProductBySku(sku){
         ExpressionAttributeNames: names
     }
     let response =  await db.query(param);
-    return response.Items;
+    return response;
 }
 async function lookupProduct(store, category){
     let exp = "#store = :store";
@@ -63,5 +63,5 @@ async function lookupProduct(store, category){
         ExpressionAttributeNames: names
     }
     let response =  await db.query(param);
-    return response.Items;
+    return response;
 }

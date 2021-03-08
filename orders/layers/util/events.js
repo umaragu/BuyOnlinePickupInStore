@@ -28,8 +28,8 @@ async function fireEvent(eventData, eventName, source) {
         /* more items */
       ]
     };
-    console.log("Event fired for ", resources);
     await eventbridge.putEvents(params).promise();
+    console.log("Event fired for ", resources);
 
 }
 module.exports.fireEvent = fireEvent;
