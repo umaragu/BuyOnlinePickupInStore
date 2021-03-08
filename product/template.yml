@@ -238,7 +238,7 @@ Resources:
     Properties:
       Name: !Sub /boppis/${Environment}/api/product
       Type: String
-      Value: !Sub "https://${ProductApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+      Value: !Sub "https://${ProductApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
 
 Outputs:
   ProductApiEndpoint: 

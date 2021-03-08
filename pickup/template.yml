@@ -310,7 +310,7 @@ Resources:
     Properties:
       Name: !Sub /boppis/${Environment}/api/pickup
       Type: String
-      Value: !Sub "https://${PickupApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+      Value: !Sub "https://${PickupApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
 
 Outputs:
   PickupApiEndpoint: 

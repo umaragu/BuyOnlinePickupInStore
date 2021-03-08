@@ -86,7 +86,7 @@ paths:
         httpMethod: POST
         uri:
           'Fn::Sub': >-
-            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateOrderLambda.Arn}/invocations
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateOrderLambda.Arn}:live/invocations
         payloadFormatVersion: '2.0'
         responses:
           default:
