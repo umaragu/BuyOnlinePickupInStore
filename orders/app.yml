@@ -52,6 +52,14 @@ Parameters:
   SENDEREMAIL:
     Type: String
     Description: EMAIL address verified in SES as sender 
+  PROVISIONENV:
+    Type: Number
+    Default: 1
+    Description: Number of provisioned instances
+  MAXPROVISIONENV:
+    Type: Number
+    Default: 10
+    Description: Number of max provisioned instances
 Globals:
   Function:
     Runtime: nodejs12.x
@@ -119,15 +127,50 @@ Resources:
         - nodejs8.10
     Metadata:
       BuildMethod: nodejs12.x              # Required to have AWS SAM build this layer
+  #############
+  # Auto scaling for Order creationg
+  #############
+  LambdaScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: utilization
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref LambdaAutoscaling
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 0.5 # Any value between 0 and 1 can be used here
+        CustomizedMetricSpecification:
+          Dimensions:
+            - Name: Resource
+              Value: !Sub "${CreateOrderLambda}:live"
+            - Name: FunctionName
+              Value: !Ref CreateOrderLambda
+          MetricName: ProvisionedConcurrencyUtilization
+          Namespace: AWS/Lambda
+          Statistic: Maximum
+          Unit: Count
+  LambdaAutoscaling:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !Ref MAXPROVISIONENV
+      MinCapacity: !Ref PROVISIONENV
+      ResourceId: !Sub function:${CreateOrderLambda}:live # You need to specify an alias or version here
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lambda.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_LambdaConcurrency
+      ScalableDimension: lambda:function:ProvisionedConcurrency
+      ServiceNamespace: lambda
+    DependsOn: CreateOrderLambdaAliaslive # This is your function logical ID + "Alias" + what you use for AutoPublishAlias
 
   #############
   # FUNCTIONS #
   #############
+  
   CreateOrderLambda:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
       Handler: order-create.handler
+      AutoPublishAlias: live
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: !Ref PROVISIONENV
       Events:
         OrderApi:
           Type: HttpApi
@@ -135,6 +178,9 @@ Resources:
             Path: /order
             Method: POST
             ApiId: !Ref OrderApi
+            RouteSettings:
+              ThrottlingRateLimit: 50
+              ThrottlingBurstLimit: 100
       Policies:
         - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
         - VPCAccessPolicy: {}
@@ -196,11 +242,17 @@ Resources:
             Path: /order
             Method: GET
             ApiId: !Ref OrderApi
+            RouteSettings:
+              ThrottlingRateLimit: 50
+              ThrottlingBurstLimit: 100
         OrderInternalApi:
           Type: HttpApi
           Properties:
             Path: /order/internal
             Method: GET
+            RouteSettings:
+              ThrottlingRateLimit: 50
+              ThrottlingBurstLimit: 100
             ApiId: !Ref OrderApi
       Policies:
         - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
@@ -361,7 +413,8 @@ Resources:
       FailOnWarnings: True
       StageName: "Prod"
       DefaultRouteSettings:
-        ThrottlingBurstLimit: 50
+        ThrottlingRateLimit: 50
+        ThrottlingBurstLimit: 100
       CorsConfiguration:
         AllowMethods:
           - "*"

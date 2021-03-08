@@ -31,21 +31,32 @@ High-level overview of how microservices interact with each other through an eve
 
 |  Services  | Description                               |
 |------------|-------------------------------------------|
-| [frontend-api](frontend-api/) | User-facing API for interacting with the services. |
+| [pickup-ui](pickup-ui/) | UI application used by store associates |
+| [retail-ui](retail-ui/) | UI application used by customers |
 
 ## Getting Started
-#### BackEnd (Deploy Manually)
+### Prerequisites
+- NodeJs
+- NPM
+- aws-cli
+- Uses SES for email. Make sure the sender email is a verified email
+
+### Manual Deployment
+
+#### BackEnd 
 
 - Clone the repo.
 Login to AWS Environment through command line[aws-cli]()
-- Create the base infrastructure needed for the API. 
-Follow the steps here. Use default parameters wherever applicable
+
+- Follow the steps here. Use default parameters wherever applicable
 ```
 cd base 
 sam deploy --stack-name boppis-base --capabilities CAPABILITY_IAM --region us-east-1 -g
 cd ../orders
+
 #Deploy Orders DB stack
 sam deploy --stack-name boppis-orders-db --capabilities CAPABILITY_IAM --region us-east-1 --template-file db.yml -g
+
 #Deploy orders services stack
 sam build -t app.yml
 sam deploy --stack-name boppis-orders-app --capabilities CAPABILITY_IAM --region us-east-1 --template-file app.yml -g
@@ -53,14 +64,15 @@ sam deploy --stack-name boppis-orders-app --capabilities CAPABILITY_IAM --region
 cd ../product
 sam build 
 sam deploy  --stack-name boppis-product --capabilities CAPABILITY_IAM --region us-east-1 --template-file template.yml -g
+
 cd ../pickup
 sam build 
-sam deploy --s3-bucket aws-sam-cli-managed-default-samclisourcebucket-qsdzmjzgr93z --stack-name boppis-pickup --capabilities CAPABILITY_IAM --region us-east-1 --template-file template.yml -g
+sam deploy --stack-name boppis-pickup --capabilities CAPABILITY_IAM --region us-east-1 --template-file template.yml -g
 
 ```
-- UI
-Deploy the UI stack.
-Login to AWS Console/Amplify Console and Run build.
+#### UI
+UI is built using amplify. The stacks will deploy the amplify application. Once successfully built, Login to AWS /Amplify Console and Run build.
+Make sure to replace the repo and oauth token.
 
 ```
 aws cloudformation deploy --template-file template.yml  --stack-name boppis-pickup-ui  --region us-east-1 --parameter-overrides Repository=https://<<GIT_REPO>> OauthToken=<<OAUTH_TOKEN>>  --capabilities CAPABILITY_IAM
@@ -77,7 +89,7 @@ node load_product.js
 ```
 
 #### BackEnd (CICD)
-Refer [Pipeline Doc](./pipeline/README.doc)
+Refer [Pipeline Doc](./pipeline/README.md)
 
 ## License
 

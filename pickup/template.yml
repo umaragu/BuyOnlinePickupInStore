@@ -19,7 +19,7 @@ Parameters:
     Description: EventBridge Event Bus Name
   EMPLOYEEUSERPOOL:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /boppis/dev/employee-pool/client/id
+    Default: /boppis/dev/employee-pool/id
     Description: Cognito user pool URL for associates
   EMPLOYEEPOOLCLIENTID:
     Type: AWS::SSM::Parameter::Value<String>
@@ -40,7 +40,7 @@ Globals:
         LOG_LEVEL: !Ref LogLevel
     Layers:
       - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:2"
-      - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:UtilLayer:3"
+      - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:UtilLayer:11"
 
 Resources:
   # Product Catalog #
@@ -100,6 +100,9 @@ Resources:
           Properties:
             Path: /pickup/{jobId}/{action}
             Method: POST
+            RouteSettings:
+              ThrottlingRateLimit: 50
+              ThrottlingBurstLimit: 100
             ApiId: !Ref PickupApi
       Policies:
         - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
@@ -125,6 +128,9 @@ Resources:
             Path: /pickup/{store}
             Method: GET
             ApiId: !Ref PickupApi
+            RouteSettings:
+              ThrottlingRateLimit: 50
+              ThrottlingBurstLimit: 100
       Policies:
         - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
         - DynamoDBReadPolicy:
@@ -216,7 +222,7 @@ Resources:
     Properties:
       FailOnWarnings: True
       StageName: "Prod"
-      # TracingEnabled: true
+    # TracingEnabled: true
       CorsConfiguration:
         AllowMethods:
           - "*"
@@ -226,6 +232,7 @@ Resources:
           - "*"
       DefaultRouteSettings:
         ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 100
       DefinitionBody:
         Fn::Transform:
           Name: AWS::Include

@@ -98,12 +98,18 @@ Resources:
             Path: /products/{store}
             Method: GET
             ApiId: !Ref ProductApi
+            RouteSettings:
+              ThrottlingRateLimit: 100
+              ThrottlingBurstLimit: 200
         ProductApiBySku:
           Type: HttpApi
           Properties:
             Path: /product/{sku}
             Method: GET
             ApiId: !Ref ProductApi
+            RouteSettings:
+              ThrottlingRateLimit: 50
+              ThrottlingBurstLimit: 100
 
       Policies:
         - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
@@ -127,6 +133,9 @@ Resources:
             Path: /product
             Method: PUT
             ApiId: !Ref ProductApi
+            RouteSettings:
+              ThrottlingRateLimit: 100
+              ThrottlingBurstLimit: 200
       Policies:
         - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
         - DynamoDBWritePolicy:
@@ -184,6 +193,7 @@ Resources:
       StageName: "Prod"
       DefaultRouteSettings:
         ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 200
       CorsConfiguration:
         AllowMethods:
           - "*"
