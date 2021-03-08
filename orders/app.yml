@@ -524,7 +524,7 @@ Resources:
     Properties:
       Name: !Sub /boppis/${Environment}/api/order
       Type: String
-      Value: !Sub "https://${OrderApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+      Value: !Sub "https://${OrderApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
 
 
 Outputs:
