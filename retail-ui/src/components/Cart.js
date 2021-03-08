@@ -153,7 +153,7 @@ class Cart extends Component {
                     <form onSubmit={this.createOrder}>
                       <ul className="form-container">
                         <li>
-                          <label>Email : <strong> {this.context.user.username} </strong></label>
+                          <label>Email : <strong> {this.context.user.attributes.email} </strong></label>
                          </li>
                         <li>
                           <label>Pickup Address : <b>{this.formatStore(this.props.store)}</b></label>
