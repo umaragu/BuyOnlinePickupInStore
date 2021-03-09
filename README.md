@@ -9,7 +9,7 @@ The __Buy Online Pickup At Store__ is a sample implementation of a event driven 
 - [AWS Lambda](https://aws.amazon.com/eventbridge/)
 - [Amazon DynamoDB](https://aws.amazon.com/eventbridge/)
 
-## Domain
+## Events
 
 _Buy Online Pickup At Store_ offers frictionless experience for customers to who are shopping online and in-store. It bridges the gap for brick-and-mortar retail customers from offering a convenient shopping experience.
 
